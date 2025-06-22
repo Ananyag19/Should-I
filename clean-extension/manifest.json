@@ -1,0 +1,31 @@
+{
+  "manifest_version": 3,
+  "name": "Should I?",
+  "version": "1.0",
+  "description": "An extension that helps users trust Amazon products",
+  "content_scripts": [
+    {
+      "matches": ["https://www.amazon.in/*"],
+      "js": ["content.js"]
+    }
+  ],
+  "icons": {
+    "16": "icons/trust.png",
+    "48": "icons/trust.png",
+    "128": "icons/trust.png"
+  },
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "icons/trust.png",
+        "icons/suspicious.png",
+        "icons/fake.png"
+      ],
+      "matches": ["<all_urls>"]
+    }
+  ],
+  "permissions": ["activeTab"],
+  "action": {
+    "default_title": "Should I?"
+  }
+}
