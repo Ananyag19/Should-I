@@ -1,0 +1,20 @@
+# Python virtual environment
+venv/
+__pycache__/
+*.pyc
+
+# Node.js modules
+node_modules/
+
+# Logs and temp files
+*.log
+.DS_Store
+.env
+
+# Build files
+dist/
+build/
+
+# Extension build cache (optional)
+*.crx
+*.zip
