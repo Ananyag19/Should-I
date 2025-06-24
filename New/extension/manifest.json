@@ -1,0 +1,28 @@
+{
+  "manifest_version": 3,
+  "name": "SHOULDISPACE SWASTIK",
+  "description": "AI-powered trust detector for Amazon products",
+  "version": "1.0",
+  "permissions": ["activeTab"],
+  "icons": {
+    "128": "logo.png"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://www.amazon.in/*"],
+      "js": ["content.js"],
+      "run_at": "document_end"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "assets/trust.png",
+        "assets/suspicious.png",
+        "assets/fake.png",
+        "logo.png"
+      ],
+      "matches": ["<all_urls>"]
+    }
+  ]
+}
