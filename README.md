@@ -55,12 +55,6 @@ New/
 - Extend `trust_score.py` for more advanced scoring.
 - Update `content.js` for different marketplaces/page layouts.
 
-## Limitations
-
-- Only works on Amazon.in (can be extended).
-- Backend must be running locally.
-- Trust logic is currently rule-based (upgradeable to ML).
-
 ## Credits
 
 - Created by Swastik-Prakash1 & Ananyag19.
