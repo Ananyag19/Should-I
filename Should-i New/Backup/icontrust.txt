@@ -1,0 +1,200 @@
+function getProductInfo() {
+  const title = document.getElementById("productTitle")?.innerText || "";
+  const seller = document.querySelector("#sellerProfileTriggerId")?.innerText || "";
+  const reviews = Array.from(document.querySelectorAll(".review-text"))
+    .map(el => el.innerText)
+    .slice(0, 5);
+
+  return { title, seller, reviews };
+}
+
+function createFloatingIcon() {
+  const icon = document.createElement("img");
+  icon.src = chrome.runtime.getURL("logo.png");
+  icon.alt = "Should I?";
+  icon.style.position = "fixed";
+  icon.style.bottom = "80px";
+  icon.style.right = "20px";
+  icon.style.width = "60px";
+  icon.style.height = "60px";
+  icon.style.borderRadius = "50%";
+  icon.style.boxShadow = "0 4px 12px rgba(0,0,0,0.3)";
+  icon.style.cursor = "pointer";
+  icon.style.zIndex = "9999";
+  icon.style.transition = "transform 0.2s ease-in-out";
+
+  icon.addEventListener("mouseenter", () => icon.style.transform = "scale(1.1)");
+  icon.addEventListener("mouseleave", () => icon.style.transform = "scale(1)");
+
+  icon.addEventListener("click", () => {
+    const data = getProductInfo();
+    if (data.title) {
+      fetch("http://localhost:5000/analyze", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data)
+      })
+      .then(res => res.json())
+      .then(res => showPopup(res))
+      .catch(err => console.error("Backend error:", err));
+    } else {
+      alert("Product info not found. Are you on a product page?");
+    }
+  });
+
+  document.body.appendChild(icon);
+}
+
+function showPopup(result) {
+  const popup = document.createElement("div");
+  popup.innerHTML = `
+    <div style="
+      background: white;
+      border: 2px solid #ccc;
+      padding: 16px;
+      border-radius: 10px;
+      font-size: 14px;
+      width: 220px;
+      box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+    ">
+      <strong>🛡️ Trust Score:</strong><br/>
+      <span style="font-size: 20px; font-weight: bold;">${result.trust_score}</span><br/>
+      <em>${result.tag}</em>
+    </div>
+  `;
+  popup.style.position = "fixed";
+  popup.style.bottom = "150px";
+  popup.style.right = "20px";
+  popup.style.zIndex = 10000;
+
+  document.body.appendChild(popup);
+
+  setTimeout(() => popup.remove(), 5000); // Auto-close
+}
+
+if (window.location.href.includes("amazon")) {
+  createFloatingIcon();
+}
+---------------------------------------------------------------------
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message.action === 'open_popup') {
+    chrome.windows.create({
+      url: chrome.runtime.getURL("popup.html"),
+      type: "popup",
+      width: 400,
+      height: 600
+    });
+  }
+});
+-------------------
+-----------------------------
+------------------------
+from flask import Flask, request, jsonify
+from flask_cors import CORS
+from trust_score import generate_trust_score
+
+app = Flask(__name__)
+CORS(app)  # allow all origins
+
+@app.route('/analyze', methods=['POST'])
+def analyze():
+    data = request.json
+    score, tag = generate_trust_score(data)
+    return jsonify({
+        "trust_score": score,
+        "tag": tag
+    })
+
+if __name__ == '__main__':
+    app.run(debug=True)
+------------------------------------------------
+def generate_trust_score(data):
+    title = data.get("title", "").lower()
+    reviews = data.get("reviews", [])
+    seller = data.get("seller", "").lower()
+
+    score = 70  # default
+    tag = "Trusted"
+
+    if "bad" in title or "duplicate" in seller:
+        score -= 30
+    if any("fake" in review.lower() for review in reviews):
+        score -= 20
+
+    if score < 50:
+        tag = "High Risk"
+    elif score < 70:
+        tag = "Suspicious"
+
+    return score, tag
+-------------------------
+----------------------
+-----------------------------
+-------------------------------
+{
+  "manifest_version": 3,
+  "name": "Should I?",
+  "description": "AI-powered trust detector for Amazon products",
+  "version": "1.0",
+  "permissions": ["activeTab"],
+  "action": {
+    "default_popup": "popup.html",
+    "default_icon": "logo.png"
+  },
+  "icons": {
+    "128": "logo.png"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://www.amazon.in/*"],
+      "js": ["content.js"],
+      "run_at": "document_end"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["logo.png"],
+      "matches": ["<all_urls>"]
+    }
+  ]
+}
+--------------------------------------------------------------
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Should I?</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      background-color: #ffffff;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 150px;
+      width: 200px;
+      font-family: sans-serif;
+    }
+
+    img {
+      width: 80px;
+      height: 80px;
+      animation: pulse 2s infinite;
+    }
+
+    @keyframes pulse {
+      0% { transform: scale(1); opacity: 0.8; }
+      50% { transform: scale(1.1); opacity: 1; }
+      100% { transform: scale(1); opacity: 0.8; }
+    }
+  </style>
+</head>
+<body>
+  <img src="logo.png" alt="Should I? Logo">
+
+</body>
+</html>
+----------------------------------------------------------------------------------
+// popup.js (optional for now)
+console.log("Popup loaded!");

@@ -1,0 +1,642 @@
+from flask import Flask, request, jsonify
+from flask_cors import CORS
+import joblib
+import traceback
+from trust_score import calculate_trust_score
+
+app = Flask(__name__)
+CORS(app)
+
+# ---------- Load Model and Vectorizer ----------
+try:
+    model = joblib.load("review_model.pkl")
+    vectorizer = joblib.load("vectorizer.pkl")
+    print("✅ Model and vectorizer loaded successfully.")
+except Exception as e:
+    model, vectorizer = None, None
+    print("[ERROR] Error loading model/vectorizer:", e)
+
+
+# ---------- /analyze Route ----------
+@app.route("/analyze", methods=["POST"])
+def analyze():
+    try:
+        data = request.get_json()
+
+        # Extract product data safely
+        title = data.get("title", "")
+        reviews = data.get("reviews", [])
+        rating = float(data.get("rating", 0))
+
+        if not reviews:
+            return jsonify({"error": "No reviews found."}), 400
+
+        # Ensure model and vectorizer are loaded
+        if model is None or vectorizer is None:
+            return jsonify({"error": "Model or vectorizer not loaded."}), 500
+
+        # Transform reviews and make predictions
+        X = vectorizer.transform(reviews)
+        predictions = model.predict(X)
+
+        # Count fake and genuine reviews
+        fake_count = sum(1 for p in predictions if str(p).lower() in ["fake", "cg", "1"])
+        genuine_count = len(predictions) - fake_count
+
+        # Calculate trust score
+        trust_score = calculate_trust_score(fake_count, genuine_count, rating)
+
+        # Overall verdict
+        if fake_count > genuine_count:
+            verdict = "Avoid ❌ (More fake reviews)"
+        else:
+            verdict = "Buy ✅ (Mostly genuine reviews)"
+
+        return jsonify({
+            "verdict": verdict,
+            "trust_score": trust_score,
+            "fake_count": fake_count,
+            "genuine_count": genuine_count
+        })
+
+    except Exception as e:
+        print("Error in /analyze:", e)
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
+
+
+if __name__ == "__main__":
+    app.run(debug=True)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+import pickle
+import os
+
+# Get the directory of this file (review_model.py)
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+# Load model & vectorizer using absolute path
+clf = pickle.load(open(os.path.join(BASE_DIR, "review_model.pkl"), "rb"))
+vectorizer = pickle.load(open(os.path.join(BASE_DIR, "vectorizer.pkl"), "rb"))
+
+def analyze_reviews(data):
+    reviews = data.get("reviews", [])
+    if not reviews:
+        return {"summary": {"verdict": "⚠️ No reviews to analyze"}}
+
+    X = vectorizer.transform(reviews)
+    preds = clf.predict(X)
+
+    counts = {"Trusted":0, "Suspicious":0, "Fake":0}
+    for p in preds:
+        if p in counts:
+            counts[p] += 1
+
+    if counts["Fake"] > len(reviews)/2:
+        verdict = "❌ Don’t Buy"
+    elif counts["Suspicious"] > len(reviews)/2:
+        verdict = "⚠️ Caution"
+    else:
+        verdict = "✅ Safe to Buy"
+
+    return {"summary": {"verdict": verdict}, "counts": counts}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+import re
+
+def detect_scam_patterns(text):
+    patterns = [
+        r"too good to be true",
+        r"received product late",
+        r"not as described",
+        r"fake product"
+    ]
+    matches = [p for p in patterns if re.search(p, text.lower())]
+    return len(matches) > 0
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+import pandas as pd
+from sklearn.model_selection import train_test_split
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.linear_model import LogisticRegression
+import pickle
+import os
+
+# Define dataset path
+DATA_PATH = os.path.join("..", "data", "frd.csv")
+
+# Load dataset
+print("[INFO] Loading dataset...")
+df = pd.read_csv(DATA_PATH)
+
+# Check basic columns
+print("[INFO] Columns:", df.columns)
+
+# Handle different possible label column names
+label_col = None
+for col in df.columns:
+    if "label" in col.lower():
+        label_col = col
+        break
+
+if label_col is None:
+    raise ValueError("No label column found in dataset!")
+
+# Clean text and label
+df = df.dropna(subset=[label_col])
+df['text_'] = df['text_'].astype(str)
+df[label_col] = df[label_col].apply(lambda x: 1 if str(x).strip().lower() in ['fake', 'cg', 'spam', 'fraud'] else 0)
+
+# Split data
+X_train, X_test, y_train, y_test = train_test_split(
+    df['text_'], df[label_col], test_size=0.2, random_state=42, stratify=df[label_col]
+)
+
+# Vectorize text
+print("[INFO] Vectorizing text...")
+vectorizer = TfidfVectorizer(max_features=5000, stop_words='english')
+X_train_vec = vectorizer.fit_transform(X_train)
+X_test_vec = vectorizer.transform(X_test)
+
+# Train model
+print("[INFO] Training model...")
+model = LogisticRegression(max_iter=1000)
+model.fit(X_train_vec, y_train)
+
+# Evaluate
+accuracy = model.score(X_test_vec, y_test)
+print(f"[INFO] Model trained with accuracy: {accuracy*100:.2f}%")
+
+# Save model and vectorizer
+with open("review_model.pkl", "wb") as f:
+    pickle.dump(model, f)
+with open("vectorizer.pkl", "wb") as f:
+    pickle.dump(vectorizer, f)
+
+print("[INFO] Model and vectorizer saved successfully!")
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# trust_score.py
+
+def calculate_trust_score(fake_count, genuine_count, rating):
+    """
+    Calculates trust score (0–100) based on fake/genuine ratio and average rating.
+    Higher score = more trustworthy product.
+    """
+    total_reviews = fake_count + genuine_count
+
+    # Prevent division by zero
+    if total_reviews == 0:
+        return 50  # neutral default
+
+    # Ratio of genuine reviews
+    genuine_ratio = genuine_count / total_reviews
+
+    # Rating normalization (0–1)
+    normalized_rating = min(max(rating / 5, 0), 1)
+
+    # Weighted formula: 80% genuine ratio + 20% rating
+    score = int((genuine_ratio * 80) + (normalized_rating * 20))
+
+    # Clamp between 0 and 100
+    return min(100, max(0, score))
+
+
+
+
+
+
+
+
+
+
+
+
+
+chrome.runtime.onInstalled.addListener(() => {
+  console.log("Should I? extension installed.");
+});
+
+
+
+
+
+
+
+
+
+
+
+
+console.log("🟢 Trust Analyzer content.js loaded.");
+
+async function analyzeProductReviews(reviews) {
+    try {
+        const response = await fetch("http://127.0.0.1:5000/analyze", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ reviews: reviews })
+        });
+
+        const data = await response.json();
+        console.log("📩 Received from backend:", data);
+
+        if (data.error) {
+            displayTrustBadge("Error: " + data.error, "gray", 0, 0, 0);
+            return;
+        }
+
+        const trustScore = data.trust_score || 0;
+        const tag = data.tag || "RED";
+        const fake = data.summary?.fake ?? 0;
+        const genuine = data.summary?.genuine ?? 0;
+
+        displayTrustBadge("Trust Score: " + trustScore + "%", tag, trustScore, fake, genuine);
+
+    } catch (error) {
+        console.error("❌ Error analyzing product:", error);
+        displayTrustBadge("Server not reachable", "gray", 0, 0, 0);
+    }
+}
+
+// Display the trust badge dynamically on the Amazon page
+function displayTrustBadge(text, tag, score, fake, genuine) {
+    let existingBadge = document.querySelector("#trustBadge");
+    if (!existingBadge) {
+        existingBadge = document.createElement("div");
+        existingBadge.id = "trustBadge";
+        existingBadge.style.position = "fixed";
+        existingBadge.style.bottom = "20px";
+        existingBadge.style.right = "20px";
+        existingBadge.style.backgroundColor = "#fff";
+        existingBadge.style.padding = "15px";
+        existingBadge.style.borderRadius = "12px";
+        existingBadge.style.boxShadow = "0 2px 10px rgba(0,0,0,0.2)";
+        existingBadge.style.fontFamily = "Arial, sans-serif";
+        existingBadge.style.zIndex = "9999";
+        existingBadge.style.width = "220px";
+        document.body.appendChild(existingBadge);
+    }
+
+    let color = "red";
+    if (tag === "GREEN") color = "green";
+    else if (tag === "YELLOW") color = "gold";
+
+    existingBadge.innerHTML = `
+        <h4 style="margin: 0 0 8px 0; font-weight: 700;">🛡️ Product Trust Report</h4>
+        <div style="font-size: 14px; margin-bottom: 5px;">${text}</div>
+        <div style="background: #eee; border-radius: 10px; height: 10px; overflow: hidden;">
+            <div style="width: ${score}%; height: 100%; background: ${color};"></div>
+        </div>
+        <p style="font-size: 13px; margin-top: 8px;">
+            ✅ Genuine Reviews: <b>${genuine}</b><br>
+            ❌ Fake Reviews: <b>${fake}</b>
+        </p>
+        <p style="font-size: 12px; color: gray; margin-top: 6px;">Tag: <b>${tag}</b></p>
+    `;
+}
+
+// 🔍 Example: Extract reviews from the product page
+function extractReviews() {
+    let reviewElements = document.querySelectorAll(".review-text-content span");
+    let reviews = [];
+    reviewElements.forEach(el => {
+        let text = el.innerText.trim();
+        if (text.length > 0) reviews.push(text);
+    });
+    return reviews.slice(0, 20); // Limit to first 20 reviews
+}
+
+// 🧠 Automatically analyze when product page loads
+window.addEventListener("load", () => {
+    console.log("🔍 Scanning page for reviews...");
+    const reviews = extractReviews();
+    if (reviews.length > 0) {
+        analyzeProductReviews(reviews);
+    } else {
+        console.log("No reviews found to analyze.");
+    }
+});
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+{
+  "manifest_version": 3,
+  "name": "Should I?",
+  "version": "1.0",
+  "description": "Analyzes Amazon product reviews and tells if it's safe to buy or not.",
+  "icons": {
+    "16": "logo.png",
+    "48": "logo.png",
+    "128": "logo.png"
+  },
+  "permissions": [
+    "activeTab",
+    "scripting"
+  ],
+  "host_permissions": [
+    "http://127.0.0.1:5000/*",
+    "https://www.amazon.in/*",
+    "https://www.amazon.com/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_icon": "logo.png"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://www.amazon.in/*",
+        "https://www.amazon.com/*"
+      ],
+      "js": ["content.js"]
+    }
+  ]
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+body {
+  font-family: "Segoe UI", sans-serif;
+  width: 280px;
+  text-align: center;
+  padding: 10px;
+  background: #f9f9f9;
+}
+
+#logo {
+  width: 60px;
+  margin-top: 10px;
+}
+
+#analyzeBtn {
+  background: #4CAF50;
+  border: none;
+  color: white;
+  padding: 8px 15px;
+  border-radius: 6px;
+  font-size: 15px;
+  cursor: pointer;
+}
+
+#analyzeBtn:hover {
+  background: #43A047;
+}
+
+#result {
+  margin-top: 10px;
+  font-weight: 600;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Should I?</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div id="container">
+    <img src="logo.png" id="logo">
+    <h2>Should I?</h2>
+    <p>Click below to analyze this product’s reviews.</p>
+    <button id="analyzeBtn">Analyze Reviews</button>
+    <div id="result"></div>
+  </div>
+  <script src="popup.js"></script>
+</body>
+</html>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+document.getElementById("analyzeBtn").addEventListener("click", async () => {
+  document.getElementById("result").innerText = "Analyzing reviews...";
+
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+
+  chrome.scripting.executeScript({
+    target: { tabId: tab.id },
+    func: async () => {
+      let reviewElements = document.querySelectorAll(".review-text-content span");
+      let reviews = [];
+      reviewElements.forEach(el => {
+        let text = el.innerText.trim();
+        if (text.length > 0) reviews.push(text);
+      });
+
+      if (reviews.length === 0) return "No reviews found.";
+
+      let res = await fetch("http://127.0.0.1:5000/analyze_reviews", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reviews })
+      });
+
+      let data = await res.json();
+      return data.summary.verdict;
+    }
+  }).then(injectionResults => {
+    const verdict = injectionResults[0].result;
+    document.getElementById("result").innerText = verdict;
+  }).catch(err => {
+    document.getElementById("result").innerText = "Error fetching data!";
+    console.error(err);
+  });
+});

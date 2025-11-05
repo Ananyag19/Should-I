@@ -1,0 +1,396 @@
+from flask import Flask, request, jsonify
+from flask_cors import CORS
+from review_model import analyze_reviews
+
+app = Flask(__name__)
+CORS(app)
+
+@app.route('/analyze_reviews', methods=['POST'])
+def analyze():
+    data = request.json
+    result = analyze_reviews(data)
+    return jsonify(result)
+
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=5000, debug=True)
+
+
+
+
+
+
+
+
+import pickle
+import os
+
+# Get the directory of this file (review_model.py)
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+# Load model & vectorizer using absolute path
+clf = pickle.load(open(os.path.join(BASE_DIR, "review_model.pkl"), "rb"))
+vectorizer = pickle.load(open(os.path.join(BASE_DIR, "vectorizer.pkl"), "rb"))
+
+def analyze_reviews(data):
+    reviews = data.get("reviews", [])
+    if not reviews:
+        return {"summary": {"verdict": "⚠️ No reviews to analyze"}}
+
+    X = vectorizer.transform(reviews)
+    preds = clf.predict(X)
+
+    counts = {"Trusted":0, "Suspicious":0, "Fake":0}
+    for p in preds:
+        if p in counts:
+            counts[p] += 1
+
+    if counts["Fake"] > len(reviews)/2:
+        verdict = "❌ Don’t Buy"
+    elif counts["Suspicious"] > len(reviews)/2:
+        verdict = "⚠️ Caution"
+    else:
+        verdict = "✅ Safe to Buy"
+
+    return {"summary": {"verdict": verdict}, "counts": counts}
+
+
+
+
+
+
+
+
+
+
+import re
+
+def detect_scam_patterns(text):
+    patterns = [
+        r"too good to be true",
+        r"received product late",
+        r"not as described",
+        r"fake product"
+    ]
+    matches = [p for p in patterns if re.search(p, text.lower())]
+    return len(matches) > 0
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+import pandas as pd
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.linear_model import LogisticRegression
+import pickle
+
+# Load dataset
+df = pd.read_csv("../data/fake_reviews.csv")  # adjust path if needed
+
+# Split X and y
+X_texts = df['text']
+y = df['label']
+
+# Vectorize text
+vectorizer = TfidfVectorizer(max_features=5000, ngram_range=(1,2))
+X = vectorizer.fit_transform(X_texts)
+
+# Train classifier
+clf = LogisticRegression(max_iter=1000)
+clf.fit(X, y)
+
+# Save model + vectorizer
+pickle.dump(clf, open("review_model.pkl", "wb"))
+pickle.dump(vectorizer, open("vectorizer.pkl", "wb"))
+
+print("✅ Model and vectorizer saved successfully!")
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+chrome.runtime.onInstalled.addListener(() => {
+  console.log("Should I? extension installed.");
+});
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+async function fetchReviewsFromPage() {
+  let reviewElements = document.querySelectorAll(".review-text-content span");
+  let reviews = [];
+
+  reviewElements.forEach(el => {
+    let text = el.innerText.trim();
+    if (text.length > 0) reviews.push(text);
+  });
+
+  console.log("Extracted reviews:", reviews);
+  return reviews.slice(0, 10); // Limit to 10 to keep it fast
+}
+
+async function sendToBackend(reviews) {
+  try {
+    let res = await fetch("http://127.0.0.1:5000/analyze_reviews", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ reviews })
+    });
+    let data = await res.json();
+    console.log("Backend result:", data);
+    return data;
+  } catch (err) {
+    console.error("Error communicating with backend:", err);
+    return null;
+  }
+}
+
+function showVerdict(verdictText) {
+  const badge = document.createElement("div");
+  badge.innerText = verdictText;
+  badge.style.position = "fixed";
+  badge.style.bottom = "20px";
+  badge.style.right = "20px";
+  badge.style.padding = "15px 25px";
+  badge.style.background = verdictText.includes("Safe")
+    ? "#4CAF50"
+    : verdictText.includes("Caution")
+    ? "#FFC107"
+    : "#F44336";
+  badge.style.color = "white";
+  badge.style.fontSize = "16px";
+  badge.style.fontWeight = "600";
+  badge.style.borderRadius = "10px";
+  badge.style.zIndex = "9999";
+  badge.style.boxShadow = "0px 2px 8px rgba(0,0,0,0.3)";
+  badge.style.fontFamily = "Segoe UI, sans-serif";
+  badge.style.cursor = "pointer";
+  badge.title = "Click to hide";
+  badge.onclick = () => badge.remove();
+  document.body.appendChild(badge);
+}
+
+async function analyzeProduct() {
+  const reviews = await fetchReviewsFromPage();
+  if (reviews.length === 0) {
+    showVerdict("⚠️ No reviews found on this page!");
+    return;
+  }
+
+  const result = await sendToBackend(reviews);
+  if (result && result.summary) {
+    showVerdict(result.summary.verdict);
+  } else {
+    showVerdict("⚠️ Unable to analyze reviews");
+  }
+}
+
+// Run when page loads
+window.addEventListener("load", () => {
+  setTimeout(analyzeProduct, 4000); // wait for Amazon page to fully load
+});
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+{
+  "manifest_version": 3,
+  "name": "Should I?",
+  "version": "1.0",
+  "description": "Analyzes Amazon product reviews and tells if it's safe to buy or not.",
+  "icons": {
+    "16": "logo.png",
+    "48": "logo.png",
+    "128": "logo.png"
+  },
+  "permissions": [
+    "activeTab",
+    "scripting"
+  ],
+  "host_permissions": [
+    "http://127.0.0.1:5000/*",
+    "https://www.amazon.in/*",
+    "https://www.amazon.com/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_icon": "logo.png"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://www.amazon.in/*",
+        "https://www.amazon.com/*"
+      ],
+      "js": ["content.js"]
+    }
+  ]
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+body {
+  font-family: "Segoe UI", sans-serif;
+  width: 280px;
+  text-align: center;
+  padding: 10px;
+  background: #f9f9f9;
+}
+
+#logo {
+  width: 60px;
+  margin-top: 10px;
+}
+
+#analyzeBtn {
+  background: #4CAF50;
+  border: none;
+  color: white;
+  padding: 8px 15px;
+  border-radius: 6px;
+  font-size: 15px;
+  cursor: pointer;
+}
+
+#analyzeBtn:hover {
+  background: #43A047;
+}
+
+#result {
+  margin-top: 10px;
+  font-weight: 600;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Should I?</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div id="container">
+    <img src="logo.png" id="logo">
+    <h2>Should I?</h2>
+    <p>Click below to analyze this product’s reviews.</p>
+    <button id="analyzeBtn">Analyze Reviews</button>
+    <div id="result"></div>
+  </div>
+  <script src="popup.js"></script>
+</body>
+</html>

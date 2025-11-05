@@ -1,0 +1,152 @@
+from flask import Flask, request, jsonify
+from flask_cors import CORS
+from trust_score import generate_trust_score
+
+app = Flask(__name__)
+CORS(app)
+
+@app.route('/analyze', methods=['POST'])
+def analyze():
+    data = request.json
+    score, tag = generate_trust_score(data)
+    return jsonify({
+        "trust_score": score,
+        "tag": tag
+    })
+
+
+if __name__ == '__main__':
+    app.run(debug=True)
+    
+
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message.action === 'open_popup') {
+    chrome.windows.create({
+      url: chrome.runtime.getURL("popup.html"),
+      type: "popup",
+      width: 400,
+      height: 600
+    });
+  }
+});
+
+function getProductInfo() {
+  const title = document.getElementById("productTitle")?.innerText || "";
+  const seller = document.querySelector("#sellerProfileTriggerId")?.innerText || "";
+  const reviews = Array.from(document.querySelectorAll(".review-text-content span"))
+    .map(el => el.innerText.trim())
+    .filter(text => text.length > 0)
+    .slice(0, 10);
+
+  return { title, seller, reviews };
+}
+
+function injectTrustBadge(tag) {
+  const productTitle = document.getElementById("productTitle");
+  if (!productTitle) return;
+
+  const badge = document.createElement("div");
+  badge.style.marginTop = "10px";
+
+  const img = document.createElement("img");
+  img.style.width = "120px";
+  img.style.height = "auto";
+
+  if (tag === "Trusted") {
+    img.src = chrome.runtime.getURL("assets/trust.png");
+    img.alt = "Trusted";
+  } else if (tag === "Suspicious") {
+    img.src = chrome.runtime.getURL("assets/suspicious.png");
+    img.alt = "Suspicious";
+  } else {
+    img.src = chrome.runtime.getURL("assets/fake.png");
+    img.alt = "Do Not Buy";
+  }
+
+  img.onerror = () => {
+    img.alt = tag;
+    img.style.background = "gray";
+    img.innerText = tag;
+  };
+
+  badge.appendChild(img);
+  productTitle.parentNode.insertBefore(badge, productTitle.nextSibling);
+}
+
+function fetchTrustDataAndInject() {
+  const data = getProductInfo();
+  if (data.title) {
+    fetch("http://localhost:5000/analyze", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data)
+    })
+    .then(res => res.json())
+    .then(res => {
+      injectTrustBadge(res.tag);
+    })
+    .catch(err => console.error("Backend error:", err));
+  }
+}
+
+// No more floating logo or popup — only auto badge injection
+if (window.location.href.includes("amazon")) {
+  fetchTrustDataAndInject();
+}
+
+{
+  "manifest_version": 3,
+  "name": "SHOULDISPACE SWASTIK",
+  "description": "AI-powered trust detector for Amazon products",
+  "version": "1.0",
+  "permissions": ["activeTab"],
+  "icons": {
+    "128": "logo.png"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://www.amazon.in/*"],
+      "js": ["content.js"],
+      "run_at": "document_end"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "assets/trust.png",
+        "assets/suspicious.png",
+        "assets/fake.png",
+        "logo.png"
+      ],
+      "matches": ["<all_urls>"]
+    }
+  ]
+}
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>SHOULDISPACE</title>
+  <style>
+    body {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 120px;
+      font-family: sans-serif;
+      background-color: #ffffff;
+    }
+
+    p {
+      text-align: center;
+      color: #555;
+    }
+  </style>
+</head>
+<body>
+  <p>SHOULDISPACE is active!</p>
+</body>
+</html>
+
+these are my code till now..so understand this and then i will ask u latter what else to do

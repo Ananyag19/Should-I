@@ -1,0 +1,105 @@
+// Check if already injected (avoid duplicate)
+if (!document.getElementById("shouldi-logo-float")) {
+    const logo = document.createElement("img");
+    logo.src = chrome.runtime.getURL("logo.png");
+    logo.alt = "Should I? Logo";
+    logo.id = "shouldi-logo-float";
+
+    // Apply styles for floating animation
+    logo.style.position = "fixed";
+    logo.style.bottom = "20px";
+    logo.style.right = "20px";
+    logo.style.width = "80px";
+    logo.style.height = "80px";
+    logo.style.zIndex = "9999";
+    logo.style.borderRadius = "50%";
+    logo.style.boxShadow = "0 4px 10px rgba(0,0,0,0.2)";
+    logo.style.animation = "float 2s ease-in-out infinite";
+    logo.style.backgroundColor = "#fff";
+    logo.style.padding = "8px";
+
+    // Animation keyframes
+    const style = document.createElement("style");
+    style.textContent = `
+    @keyframes float {
+      0% { transform: translateY(0); }
+      50% { transform: translateY(-10px); }
+      100% { transform: translateY(0); }
+    }`;
+    document.head.appendChild(style);
+
+    // Add to page
+    document.body.appendChild(logo);
+    logo.src = chrome.runtime.getURL("logo.png");
+
+}
+-------------------------------------------------------------------
+
+{
+  "manifest_version": 3,
+  "name": "Should I?",
+  "description": "AI-powered trust detector for Amazon products",
+  "version": "1.0",
+  "permissions": ["activeTab"],
+  "action": {
+    "default_popup": "popup.html",
+    "default_icon": "logo.png"
+  },
+  "icons": {
+    "128": "logo.png"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://www.amazon.in/*"],
+      "js": ["content.js"],
+      "run_at": "document_end"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["logo.png"],
+      "matches": ["<all_urls>"]
+    }
+  ]
+}
+----------------------------------------------------------------
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Should I?</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      background-color: #ffffff;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 150px;
+      width: 200px;
+      font-family: sans-serif;
+    }
+
+    img {
+      width: 80px;
+      height: 80px;
+      animation: pulse 2s infinite;
+    }
+
+    @keyframes pulse {
+      0% { transform: scale(1); opacity: 0.8; }
+      50% { transform: scale(1.1); opacity: 1; }
+      100% { transform: scale(1); opacity: 0.8; }
+    }
+  </style>
+</head>
+<body>
+  <img src="logo.png" alt="Should I? Logo">
+
+</body>
+</html>
+-------------------------------------------------------------------------
+// popup.js (optional for now)
+console.log("Popup loaded!");
