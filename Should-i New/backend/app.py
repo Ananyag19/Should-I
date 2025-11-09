@@ -43,7 +43,7 @@ def analyze():
             verdict = "Avoid buying — too many suspicious reviews 🚫"
         elif fake_count == genuine_count:
             verdict = "Unclear — reviews seem mixed ⚠️"
-        else:
+        else: 
             verdict = "Looks trustworthy! You can buy ✅"
 
         return jsonify({
