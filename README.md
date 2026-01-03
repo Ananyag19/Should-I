@@ -59,6 +59,6 @@ New/
 
 - Created by Swastik-Prakash1 & Ananyag19.
 
----
+![IMG-20251113-WA0002](https://github.com/user-attachments/assets/862785ed-57ef-4c73-afdd-ea187278233f)
 
-**Feel free to open issues or submit PRs for improvements!**
+![IMG-20251112-WA0025](https://github.com/user-attachments/assets/eb1e7362-2b05-46a8-8072-446176b74c20)
